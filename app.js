@@ -12,6 +12,8 @@ const cookieParser = require('cookie-parser');
 const expressLayouts = require('express-ejs-layouts');
 const morgan = require('morgan');
 const helmet = require('helmet');
+// --- REDIS IMPORT ---
+const redis = require('redis'); 
 
 // Load environment variables
 dotenv.config();
@@ -23,8 +25,36 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+// --- REDIS PUB/SUB CLIENTS (for scaling the chat) ---
+// Use environment variable for Redis URL if available, otherwise default to local
+const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
+
+// 1. Publisher Client (To send messages to Redis channels)
+const publisher = redis.createClient({ url: REDIS_URL });
+publisher.connect().then(() => console.log('Redis Publisher Connected')).catch(err => console.error('Redis Publisher Error:', err));
+
+// 2. Subscriber Client (To receive messages from Redis channels)
+const subscriber = redis.createClient({ url: REDIS_URL });
+subscriber.connect().then(() => console.log('Redis Subscriber Connected')).catch(err => console.error('Redis Subscriber Error:', err));
+
+// --- In-memory store for tracking LOCAL WebSocket connections ---
+// This replaces the old 'chatRooms' Map and is necessary to map Redis messages
+// back to the correct local clients on this specific server instance.
+const localConnections = new Map(); // Key: carpoolId, Value: Set of connected ws clients
+
+function broadcastToLocalClients(carpoolId, message) {
+    if (!localConnections.has(carpoolId)) return;
+    localConnections.get(carpoolId).forEach(ws => {
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(message);
+        }
+    });
+}
+
+// ----------------------------------------------------
+
 // --- Middleware ---
-app.use(helmet());
+//app.use(helmet());
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -38,20 +68,23 @@ const Carpool = require('./models/Carpool');
 const Chat = require('./models/Chat');
 const { auth, admin } = require('./middleware/auth');
 
-// In-memory store for chat rooms
-const chatRooms = new Map();
-
-// --- Global Middleware for User ---
+// --- Global Middleware for User (No change needed here) ---
 app.use((req, res, next) => {
     const token = req.cookies.token;
     if (token) {
         try {
-            res.locals.user = jwt.verify(token, process.env.JWT_SECRET);
+            // Note: req.user is often used here, but res.locals.user is fine too.
+            const verifiedUser = jwt.verify(token, process.env.JWT_SECRET);
+            res.locals.user = verifiedUser;
+            // Also attach to req.user for use in auth middleware functions (as seen in your routes)
+            req.user = verifiedUser; 
         } catch (ex) {
             res.locals.user = null;
+            req.user = null;
         }
     } else {
         res.locals.user = null;
+        req.user = null;
     }
     next();
 });
@@ -62,7 +95,7 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.set('layout', 'layouts/main');
 
-// --- ROUTES ---
+// --- ROUTES (No change needed here) ---
 
 // Main Route
 app.get('/', async (req, res) => {
@@ -81,9 +114,8 @@ app.get('/', async (req, res) => {
     }
 });
 
-// Auth Routes
+// Auth Routes (Login, Register, Logout) - Omitted for brevity, assuming no change needed
 app.get('/auth/login-register', (req, res) => res.render('auth/login-register', { title: 'Login / Register', error: null, message: null }));
-
 app.post('/auth/register', async (req, res) => {
     const { name, email, password } = req.body;
     try {
@@ -93,7 +125,6 @@ app.post('/auth/register', async (req, res) => {
         res.render('auth/login-register', { title: 'Login / Register', error: 'User already exists.', message: null });
     }
 });
-
 app.post('/auth/login', async (req, res) => {
     const { email, password } = req.body;
     try {
@@ -108,28 +139,25 @@ app.post('/auth/login', async (req, res) => {
         res.render('auth/login-register', { title: 'Login / Register', error: 'Server error.', message: null });
     }
 });
-
 app.get('/logout', (req, res) => {
     res.clearCookie('token');
     res.redirect('/auth/login-register');
 });
 
-// Admin Routes
+// Admin Routes - Omitted for brevity, assuming no change needed
 app.get('/admin/manage-offers', auth, admin, async (req, res) => {
     const carpools = await Carpool.find().populate('userId', 'name email');
     res.render('admin/manage-offers', { title: 'Manage Offers', carpools });
 });
-
 app.delete('/admin/offers/:id', auth, admin, async(req, res) => {
     await Carpool.findByIdAndDelete(req.params.id);
     res.redirect('/admin/manage-offers');
 });
 
-// Carpool Routes
+// Carpool Routes - Omitted for brevity, assuming no change needed
 app.get('/carpools/new', auth, (req, res) => { 
     res.render('user/create-offer', { title: 'Create Offer' });
 });
-
 app.post('/carpools', auth, async (req, res) => { 
     const { carName, location, time, price, gender, totalSeats } = req.body;
     try {
@@ -140,7 +168,6 @@ app.post('/carpools', auth, async (req, res) => {
         res.status(500).send('Server error.');
     }
 });
-
 app.post('/carpools/:id/book', auth, async (req, res) => { 
     try {
         const carpool = await Carpool.findById(req.params.id);
@@ -158,7 +185,6 @@ app.post('/carpools/:id/book', auth, async (req, res) => {
         res.status(500).send('Server error.');
     }
 });
-
 app.post('/carpools/:id/cancel', auth, async (req, res) => { 
     try {
         const carpool = await Carpool.findById(req.params.id);
@@ -177,29 +203,60 @@ app.post('/carpools/:id/cancel', auth, async (req, res) => {
     }
 });
 
-// Chat Route
+// Chat Route (No change needed here)
 app.get('/chat/:carpoolId', auth, async (req, res) => {
     const messages = await Chat.find({ carpoolId: req.params.carpoolId }).populate('sender', 'name');
     res.render('chat/chat', { title: 'Chat', carpoolId: req.params.carpoolId, messages });
 });
 
-// --- WebSocket Logic ---
+// --- WebSocket Logic (UPDATED for Redis Pub/Sub) ---
 wss.on('connection', ws => {
     console.log('Client connected to WebSocket');
     
+    // Attach a property to the WebSocket object to track its room
+    ws.carpoolId = null;
+
     ws.on('message', async (message) => {
         try {
             const data = JSON.parse(message);
             const { type, carpoolId, userId, name, message: messageText } = data;
 
             if (type === 'join') {
-                if (!chatRooms.has(carpoolId)) {
-                    chatRooms.set(carpoolId, new Set());
-                }
-                chatRooms.get(carpoolId).add(ws);
-                console.log(`Client ${userId} joined room ${carpoolId}`);
-                return;
+    // Leave previous room
+    if (ws.carpoolId && localConnections.has(ws.carpoolId)) {
+        localConnections.get(ws.carpoolId).delete(ws);
+
+        if (localConnections.get(ws.carpoolId).size === 0) {
+            try {
+                await subscriber.unsubscribe(ws.carpoolId);
+            } catch (err) {
+                console.error(`Unsubscribe failed for ${ws.carpoolId}:`, err);
             }
+            localConnections.delete(ws.carpoolId);
+        }
+    }
+
+    ws.carpoolId = carpoolId;
+
+    // Subscribe if first client in this room
+    if (!localConnections.has(carpoolId)) {
+        try {
+            await subscriber.subscribe(carpoolId, (payload) => {
+                broadcastToLocalClients(carpoolId, payload);
+            });
+            console.log(`Subscribed to Redis channel ${carpoolId}`);
+        } catch (err) {
+            console.error(`Subscribe error for ${carpoolId}:`, err);
+        }
+
+        localConnections.set(carpoolId, new Set());
+    }
+
+    localConnections.get(carpoolId).add(ws);
+    console.log(`Client ${userId} joined ${carpoolId}`);
+    return;
+}
+
 
             if (type === 'chat') {
                 // Save the message to the database
@@ -214,26 +271,36 @@ wss.on('connection', ws => {
                 const broadcastMessage = JSON.stringify({
                     type: 'message',
                     name: name,
-                    message: messageText
+                    message: messageText,
                 });
 
-                if (chatRooms.has(carpoolId)) {
-                    chatRooms.get(carpoolId).forEach(client => {
-                        if (client.readyState === WebSocket.OPEN) {
-                            client.send(broadcastMessage);
-                        }
-                    });
-                }
+                // --- REDIS: Publish the message to the Redis channel ---
+                // The message is sent to Redis, which then broadcasts it to the subscriber
+                // clients on ALL server instances (including this one).
+                await publisher.publish(carpoolId, broadcastMessage);
             }
         } catch (error) {
             console.error('Failed to process message or save to DB:', error);
         }
     });
 
-    ws.on('close', () => {
-        chatRooms.forEach(clients => clients.delete(ws));
-        console.log('Client disconnected');
-    });
+    ws.on('close', async () => {
+    if (ws.carpoolId && localConnections.has(ws.carpoolId)) {
+        const set = localConnections.get(ws.carpoolId);
+        set.delete(ws);
+
+        if (set.size === 0) {
+            try {
+                await subscriber.unsubscribe(ws.carpoolId);
+            } catch (err) {
+                console.error(`Unsubscribe error for ${ws.carpoolId}:`, err);
+            }
+            localConnections.delete(ws.carpoolId);
+            console.log(`Room ${ws.carpoolId} now empty`);
+        }
+    }
+});
+
 });
 
 // --- EXPORT THE APP AND SERVER ---
