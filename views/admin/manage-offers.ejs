@@ -5,25 +5,38 @@
     </div>
 
     <div class="carpool-grid">
-        <% if (carpools.length > 0) { %>
-            <% carpools.forEach(carpool => { %>
-                <div class="carpool-card">
-                    <div>
-                        <h4><%= carpool.carName %></h4>
-                        <p><strong>From:</strong> <%= carpool.location %></p>
-                        <p><strong>Time:</strong> <%= new Date(carpool.time).toLocaleTimeString('en-IN', {hour: '2-digit', minute:'2-digit'}) %></p>
-                        <p><strong>Price:</strong> ₹<%= carpool.price %></p>
-                        <p><strong>Driver:</strong> <%= carpool.userId.name %> (<%= carpool.userId.email %>)</p>
-                    </div>
-                    <div class="card-footer">
-                        <form action="/admin/offers/<%= carpool._id %>?_method=DELETE" method="POST">
-                            <button type="submit" class="btn btn-danger">Delete Offer</button>
-                        </form>
-                    </div>
-                </div>
-            <% }); %>
-        <% } else { %>
+
+        <% if (carpools.length === 0) { %>
             <p>No carpool offers to manage.</p>
         <% } %>
+
+        <% carpools.forEach(carpool => { %>
+
+            <div class="carpool-card">
+
+                <div>
+                    <h4><%= carpool.carName %></h4>
+                    <p><strong>From:</strong> <%= carpool.location %></p>
+                    <p><strong>Time:</strong> 
+                        <%= new Date(carpool.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute:'2-digit' }) %>
+                    </p>
+                    <p><strong>Price:</strong> ₹<%= carpool.price %></p>
+
+                    <p><strong>Driver:</strong> 
+                        <%= carpool.userId?.name %> 
+                        (<%= carpool.userId?.email %>)
+                    </p>
+                </div>
+
+                <div class="card-footer">
+                    <form action="/admin/offers/<%= carpool._id %>?_method=DELETE" method="POST">
+                        <button type="submit" class="btn btn-danger">Delete Offer</button>
+                    </form>
+                </div>
+
+            </div>
+
+        <% }); %>
+
     </div>
 </div>
