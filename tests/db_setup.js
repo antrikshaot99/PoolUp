@@ -14,7 +14,7 @@ module.exports.connect = async () => {
   // We use process.env.MONGO_URI set by the preset
   await mongoose.connect(process.env.MONGO_URI, mongooseOptions);
 };
-
+// Clear the database and re-create admin user
 module.exports.clearDatabase = async () => {
   // 1. Clear all models
   await Promise.all([
