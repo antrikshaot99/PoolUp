@@ -89,12 +89,18 @@ describe('Full Integration: Offer -> Discovery -> Chat', () => {
         await pageA.type('input[name="price"]', '50');
         await pageA.type('input[name="totalSeats"]', '3');
 
-        await pageA.evaluate(() => {
+        // Generate a future datetime (tomorrow at 6 PM)
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(18, 0, 0, 0);
+        const futureDateTime = tomorrow.toISOString().slice(0, 16); // Format: YYYY-MM-DDTHH:mm
+
+        await pageA.evaluate((dateTimeValue) => {
             const timeInput = document.querySelector('input[name="time"]');
-            if (timeInput) timeInput.value = '18:00'; 
+            if (timeInput) timeInput.value = dateTimeValue; 
             const genderSelect = document.querySelector('select[name="gender"]');
             if (genderSelect) genderSelect.selectedIndex = 0;
-        });
+        }, futureDateTime);
 
         await Promise.all([
             pageA.waitForNavigation({ waitUntil: 'domcontentloaded' }),

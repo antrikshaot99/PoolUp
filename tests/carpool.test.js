@@ -49,10 +49,15 @@ it('should block unauthenticated users from seeing the create page', async () =>
     });
 
     it('should allow an authenticated user to create a new carpool offer', async () => {
+        // Generate a future date (tomorrow at 10 AM)
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(10, 0, 0, 0);
+        
         const mockCarpool = {
             carName: 'Test Car',
             location: 'Test Location',
-            time: '2025-12-01T10:00:00.000Z',
+            time: tomorrow.toISOString(),
             price: 100,
             gender: 'male',
             totalSeats: 3

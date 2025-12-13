@@ -82,11 +82,16 @@ describe('Full Browser User Journey', () => {
         await page.type('input[name="totalSeats"]', carpoolData.seats);
 
         // Fill TIME and GENDER with event dispatching
-        await page.evaluate(() => {
+        // Generate a future datetime (tomorrow at 10:00 AM)
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(10, 0, 0, 0);
+        const futureDateTime = tomorrow.toISOString().slice(0, 16); // Format: YYYY-MM-DDTHH:mm
+        
+        await page.evaluate((dateTimeValue) => {
             const timeInput = document.querySelector('input[name="time"]');
             if (timeInput) {
-                // *** FIX: Use HH:mm format for input type="time" ***
-                timeInput.value = '10:00'; 
+                timeInput.value = dateTimeValue; 
                 timeInput.dispatchEvent(new Event('input', { bubbles: true }));
                 timeInput.dispatchEvent(new Event('change', { bubbles: true }));
             }
@@ -97,7 +102,7 @@ describe('Full Browser User Journey', () => {
                 if (!genderSelect.value && genderSelect.options.length > 0) genderSelect.selectedIndex = 0;
                 genderSelect.dispatchEvent(new Event('change', { bubbles: true }));
             }
-        });
+        }, futureDateTime);
 
         // Submit form
         await Promise.all([
