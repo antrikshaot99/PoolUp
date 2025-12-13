@@ -219,6 +219,43 @@ app.get('/admin/manage-offers', auth, admin, async (req, res) => {
     const carpools = await Carpool.find().populate('userId', 'name email');
     res.render('admin/manage-offers', { title: 'Manage Offers', carpools });
 });
+//===============
+// Admin: Manage Users
+app.get('/admin/manage-users', auth, admin, async (req, res) => {
+    try {
+        const users = await User.find().select('name email role');
+        res.render('admin/manage-users', {
+            title: 'Manage Users',
+            users
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Failed to load users');
+    }
+});
+
+// Admin: Delete User
+app.delete('/admin/users/:id', auth, admin, async (req, res) => {
+    try {
+        const userId = req.params.id;
+
+        // Prevent admin from deleting themselves
+        if (req.user.id === userId) {
+            return res.status(400).send('You cannot delete yourself.');
+        }
+
+        await User.findByIdAndDelete(userId);
+
+        // Optional but recommended: delete their carpools
+        await Carpool.deleteMany({ userId });
+
+        res.redirect('/admin/manage-users');
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Failed to delete user');
+    }
+});
+//-------------
 app.delete('/admin/offers/:id', auth, admin, async(req, res) => {
     await Carpool.findByIdAndDelete(req.params.id);
     res.redirect('/admin/manage-offers');
