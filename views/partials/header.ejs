@@ -6,6 +6,7 @@
                 <li><a href="/">Dashboard</a></li>
                 <% if (user.role === 'admin') { %>
                     <li><a href="/admin/manage-offers">Manage Offers</a></li>
+                    <li><a href="/admin/manage-users">Manage Users</a></li>
                 <% } else { %>
                     <li><a href="/carpools/new">Create Offer</a></li>
                 <% } %>
