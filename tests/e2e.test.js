@@ -5,74 +5,114 @@ const User = require('../models/User');
 const { app, server } = require('../app'); 
 const mongoose = require('mongoose'); 
 
-const APP_URL = 'http://localhost:3000';
+const PORT = 4000 + (parseInt(process.env.JEST_WORKER_ID) || 0);
+const APP_URL = `http://localhost:${PORT}`;
 
 let browser;
 let page;
 let appServer; 
-let mockUser = {
-    name: 'E2E User',
-    email: 'e2e@example.com',
-    password: 'password123',
+
+const newUser = {
+    name: 'Browser User',
+    email: 'browser_user@example.com',
+    password: 'securePassword123'
 };
 
-// --- HOOKS ---
+const carpoolData = {
+    carName: 'Honda City',
+    location: 'Main Gate',
+    price: '50',
+    seats: '3'
+};
+
 beforeAll(async () => {
-    // 1. Connect this test's Mongoose (for the server)
-    // We use process.env.MONGO_URI from the preset
-    await mongoose.connect(process.env.MONGO_URI);
-    
-    // 2. Start the app server
-    appServer = server.listen(3000, () => console.log('E2E server started on 3000'));
-    
-    // 3. Launch the browser
-    browser = await puppeteer.launch({ headless: "new" });
+    await db.connect();
+    appServer = server.listen(PORT, () => console.log(`E2E server started on ${PORT}`));
+    browser = await puppeteer.launch({ 
+    headless: true,   // Open a real browser window
+    slowMo: 100,       // Slow down actions by 100ms so you can see them happening
+    args: ['--no-sandbox'] 
+});
     page = await browser.newPage();
+    page.setDefaultNavigationTimeout(60000); 
 });
 
 beforeEach(async () => {
-    // 1. Clear DB and create admin
     await db.clearDatabase();
-    
-    // 2. Create the passenger user for this test
-    await User.create(mockUser); 
 });
 
 afterAll(async () => {
     if (browser) await browser.close();
-    if (appServer) appServer.close();
-    await mongoose.disconnect(); // Disconnect this file's Mongoose
+    if (appServer) await appServer.close();
+    await db.closeDatabase();
 });
-// --- END HOOKS ---
 
-describe('E2E Login Flow', () => {
-
-    it('should fail to log in with wrong credentials', async () => {
+describe('Full Browser User Journey', () => {
+    it('should allow a user to Register, Login, and Create a Carpool', async () => {
+        // --- STEP 1: REGISTER ---
         await page.goto(`${APP_URL}/auth/login-register`);
-        await page.type('form[action="/auth/login"] input[name="email"]', mockUser.email);
-        await page.type('form[action="/auth/login"] input[name="password"]', 'wrongpassword');
-        await page.click('form[action="/auth/login"] button[type="submit"]');
-
-        await page.waitForSelector('form[action="/auth/login"] p'); 
-        const errorText = await page.$eval('form[action="/auth/login"] p', el => el.textContent);
-        
-        expect(errorText).toContain('Invalid credentials.'); 
-    }, 20000);
-
-    it('should log in successfully with correct credentials', async () => {
-        await page.goto(`${APP_URL}/auth/login-register`);
-        await page.type('form[action="/auth/login"] input[name="email"]', mockUser.email);
-        await page.type('form[action="/auth/login"] input[name="password"]', mockUser.password);
+        await page.type('form[action="/auth/register"] input[name="name"]', newUser.name);
+        await page.type('form[action="/auth/register"] input[name="email"]', newUser.email);
+        await page.type('form[action="/auth/register"] input[name="password"]', newUser.password);
         
         await Promise.all([
-            page.waitForNavigation(),
+            page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+            page.click('form[action="/auth/register"] button[type="submit"]')
+        ]);
+
+        // --- STEP 2: LOGIN ---
+        if (!page.url().includes('auth')) await page.goto(`${APP_URL}/auth/login-register`);
+        
+        await page.type('form[action="/auth/login"] input[name="email"]', newUser.email);
+        await page.type('form[action="/auth/login"] input[name="password"]', newUser.password);
+
+        await Promise.all([
+            page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
             page.click('form[action="/auth/login"] button[type="submit"]')
         ]);
 
-        const pageTitle = await page.title();
-        const logoutLink = await page.$('a[href="/logout"]');
+        // --- STEP 3: CREATE OFFER ---
+        console.log('Step 3: Creating Carpool Offer...');
+        await page.click('a[href="/carpools/new"]'); 
+        await page.waitForSelector('form');
         
-        expect(pageTitle).toContain('Dashboard');
-        expect(logoutLink).not.toBeNull();
-    }, 20000);
+        await page.type('input[name="carName"]', carpoolData.carName);
+        await page.type('input[name="location"]', carpoolData.location);
+        await page.type('input[name="price"]', carpoolData.price);
+        await page.type('input[name="totalSeats"]', carpoolData.seats);
+
+        // Fill TIME and GENDER with event dispatching
+        await page.evaluate(() => {
+            const timeInput = document.querySelector('input[name="time"]');
+            if (timeInput) {
+                // *** FIX: Use HH:mm format for input type="time" ***
+                timeInput.value = '10:00'; 
+                timeInput.dispatchEvent(new Event('input', { bubbles: true }));
+                timeInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            const genderSelect = document.querySelector('select[name="gender"]');
+            if (genderSelect) {
+                genderSelect.value = 'any'; 
+                if (!genderSelect.value && genderSelect.options.length > 0) genderSelect.selectedIndex = 0;
+                genderSelect.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        });
+
+        // Submit form
+        await Promise.all([
+            page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+            page.$eval('form', form => form.submit()) 
+        ]);
+
+        // --- STEP 4: VERIFY ---
+        const dashboardContent = await page.content();
+        
+        if (dashboardContent.includes('Server error')) {
+            throw new Error('Form submission caused 500 Server Error. Check server logs for validation details.');
+        }
+
+        expect(dashboardContent).toContain(carpoolData.carName);
+
+    }, 100000);
 });

@@ -27,21 +27,53 @@ const wss = new WebSocket.Server({ server });
 
 // --- REDIS PUB/SUB CLIENTS (for scaling the chat) ---
 // Use environment variable for Redis URL if available, otherwise default to local
-const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
+const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 
-// 1. Publisher Client (To send messages to Redis channels)
-const publisher = redis.createClient({ url: REDIS_URL });
-publisher.connect().then(() => console.log('Redis Publisher Connected')).catch(err => console.error('Redis Publisher Error:', err));
+// If testing, provide an in-memory mock for Redis to avoid external dependency
+const isTest = process.env.NODE_ENV === 'test';
 
-// 2. Subscriber Client (To receive messages from Redis channels)
-const subscriber = redis.createClient({ url: REDIS_URL });
-subscriber.connect().then(() => console.log('Redis Subscriber Connected')).catch(err => console.error('Redis Subscriber Error:', err));
+// *** FIX: SHARED STATE FOR MOCK REDIS ***
+// We define these MAPS outside the function so all clients share the same data
+const mockStore = new Map();
+const mockSubscribers = new Map();
+
+function createInMemoryRedisMock() {
+    return {
+        connect: async () => {},
+        publish: async (channel, payload) => {
+            // Use the shared 'mockSubscribers' map
+            const subs = mockSubscribers.get(channel) || [];
+            subs.forEach(fn => {
+                try { fn(payload); } catch (e) {}
+            });
+        },
+        subscribe: async (channel, handler) => {
+            // Use the shared 'mockSubscribers' map
+            const list = mockSubscribers.get(channel) || [];
+            list.push(handler);
+            mockSubscribers.set(channel, list);
+        },
+        unsubscribe: async (channel) => {
+            mockSubscribers.delete(channel);
+        },
+        get: async (key) => mockStore.has(key) ? mockStore.get(key) : null,
+        setEx: async (key, ttlSeconds, value) => { mockStore.set(key, value); },
+        del: async (key) => { mockStore.delete(key); },
+    };
+}
+
+// 1. Publisher/Subscriber/Caching Clients
+const publisher = isTest ? createInMemoryRedisMock() : redis.createClient({ url: REDIS_URL });
+if (!isTest) publisher.connect().then(() => console.log('Redis Publisher Connected')).catch(err => console.error('Redis Publisher Error:', err));
+
+const subscriber = isTest ? createInMemoryRedisMock() : redis.createClient({ url: REDIS_URL });
+if (!isTest) subscriber.connect().then(() => console.log('Redis Subscriber Connected')).catch(err => console.error('Redis Subscriber Error:', err));
 
 // --- In-memory store for tracking LOCAL WebSocket connections ---
 const localConnections = new Map(); // Key: carpoolId, Value: Set of connected ws clients
 
-const cacheClient = redis.createClient({ url: REDIS_URL });
-cacheClient.connect().catch(console.error);
+const cacheClient = isTest ? createInMemoryRedisMock() : redis.createClient({ url: REDIS_URL });
+if (!isTest) cacheClient.connect().catch(console.error);
 
 module.exports = { app, server };
 

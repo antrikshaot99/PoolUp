@@ -29,12 +29,16 @@ afterAll(async () => await db.closeDatabase());
 
 describe('Carpool Routes', () => {
 
-    it('should block unauthenticated users from seeing the create page', async () => {
-        const response = await request(app)
-            .get('/carpools/new');
-        expect(response.statusCode).toBe(302);
-        expect(response.headers.location).toBe('/login'); 
-    });
+    // tests/carpool.test.js
+
+// ... inside the first 'it' block ...
+it('should block unauthenticated users from seeing the create page', async () => {
+    const response = await request(app)
+        .get('/carpools/new');
+    expect(response.statusCode).toBe(302);
+    // CHANGE THIS LINE:
+    expect(response.headers.location).toBe('/login'); 
+});
 
     it('should allow authenticated users to see the create page', async () => {
         const response = await request(app)
