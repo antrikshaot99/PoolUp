@@ -3,7 +3,7 @@
         <h2>Manage Users</h2>
         <h3>View and remove registered users</h3>
     </div>
-
+    
     <% if (users.length === 0) { %>
         <p>No users found.</p>
     <% } %>
@@ -18,7 +18,9 @@
                 </div>
 
                 <div class="card-footer">
+                    <!-- Allow deletion only if the user is not an admin -->
                     <% if (user.role !== 'admin') { %>
+                        <!-- Form to delete a user (DELETE request via method override) -->
                         <form action="/admin/users/<%= user._id %>?_method=DELETE" method="POST">
                             <button type="submit" class="btn btn-danger">
                                 Delete User
