@@ -1,5 +1,6 @@
 // app.js
 // Import necessary modules
+
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -19,6 +20,8 @@ const redis = require('redis');
 dotenv.config();
 
 const app = express();
+
+app.set("trust proxy", 1);
 
 // --- Server & WebSocket Setup ---
 // We create the server here so it can be exported for testing
@@ -105,15 +108,19 @@ const redisStore = new RedisStore({
 });
 
 app.use(session({
+    name: "poolup.sid",
     store: redisStore,
     secret: process.env.SESSION_SECRET || "super-secret",
     resave: false,
     saveUninitialized: false,
     cookie: {
         httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
         maxAge: 1000 * 60 * 60 * 24,
     },
 }));
+
 
 app.use(express.static(path.join(__dirname, 'public')));
 
