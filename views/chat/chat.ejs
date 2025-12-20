@@ -1,3 +1,4 @@
+<!-- Main page container, centered vertically and horizontally -->
 <div class="page-container" style="display: grid; place-items: center; min-height: 80vh;">
     <div class="page-header" style="margin-bottom: 1rem;">
         <h2>Chat about Ride</h2>
@@ -9,6 +10,7 @@
                     <p><strong><%= msg.sender.name %>:</strong> <%= msg.message %></p>
                 <% }); %>
             <% } else { %>
+                 <!-- Message shown when no chat messages exist -->
                  <p style="text-align: center; color: var(--text-secondary);">No messages yet. Say hello!</p>
             <% } %>
         </div>
