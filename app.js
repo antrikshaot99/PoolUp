@@ -210,7 +210,12 @@ app.post('/auth/login', async (req, res) => {
             return res.render('auth/login-register', { title: 'Login / Register', error: 'Invalid credentials.', message: null });
         }
         const token = jwt.sign({ id: user._id, role: user.role, name: user.name, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
-        res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
+        res.cookie('token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: 'lax',
+});
+
         res.redirect('/');
     } catch (err) {
         res.render('auth/login-register', { title: 'Login / Register', error: 'Server error.', message: null });
