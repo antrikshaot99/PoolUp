@@ -21,20 +21,19 @@ app.set('trust proxy', 1);
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// ================== MONGODB CONNECT (FIX) ==================
+// ================== MONGODB ==================
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ MongoDB Connected'))
   .catch(err => {
-    console.error('❌ MongoDB Connection Error:', err);
+    console.error('❌ MongoDB Error:', err);
     process.exit(1);
   });
 
 // ================== REDIS ==================
-const REDIS_URL = process.env.REDIS_URL;
-const publisher = redis.createClient({ url: REDIS_URL });
-const subscriber = redis.createClient({ url: REDIS_URL });
-const cacheClient = redis.createClient({ url: REDIS_URL });
+const publisher = redis.createClient({ url: process.env.REDIS_URL });
+const subscriber = redis.createClient({ url: process.env.REDIS_URL });
+const cacheClient = redis.createClient({ url: process.env.REDIS_URL });
 
 (async () => {
   try {
@@ -43,7 +42,7 @@ const cacheClient = redis.createClient({ url: REDIS_URL });
     await cacheClient.connect();
     console.log('✅ Redis Connected');
   } catch (err) {
-    console.error('❌ Redis error:', err);
+    console.error('❌ Redis Error:', err);
   }
 })();
 
@@ -70,16 +69,17 @@ const { auth, admin } = require('./middleware/auth');
 // ================== GLOBAL AUTH ==================
 app.use((req, res, next) => {
   const token = req.cookies.token;
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = decoded;
-      res.locals.user = decoded;
-    } catch {
-      req.user = null;
-      res.locals.user = null;
-    }
-  } else {
+  if (!token) {
+    req.user = null;
+    res.locals.user = null;
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    res.locals.user = decoded;
+  } catch {
     req.user = null;
     res.locals.user = null;
   }
@@ -95,20 +95,25 @@ app.get('/', async (req, res) => {
       return res.render('home', { title: 'Welcome', carpools: [] });
     }
 
-    const cached = await cacheClient.get('carpools:list');
-    if (cached) {
-      return res.render('home', {
-        title: 'Dashboard',
-        carpools: JSON.parse(cached),
-      });
-    }
+    try {
+      const cached = await cacheClient.get('carpools:list');
+      if (cached) {
+        return res.render('home', {
+          title: 'Dashboard',
+          carpools: JSON.parse(cached),
+        });
+      }
+    } catch {}
 
     const carpools = await Carpool.find()
       .sort({ createdAt: -1 })
       .populate('userId', 'name email')
       .populate('bookedBy.user', 'name');
 
-    await cacheClient.setEx('carpools:list', 30, JSON.stringify(carpools));
+    try {
+      await cacheClient.setEx('carpools:list', 30, JSON.stringify(carpools));
+    } catch {}
+
     res.render('home', { title: 'Dashboard', carpools });
   } catch (err) {
     console.error(err);
@@ -130,10 +135,11 @@ app.post('/auth/register', async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    // 👇 ONLY this email becomes admin
-    const role = email === "admin@123" ? "admin" : "user";
-
-    await User.create({ name, email, password, role });
+    await User.create({
+      name,
+      email,
+      password   // role will default to "user"
+    });
 
     res.render('auth/login-register', {
       title: 'Login / Register',
@@ -173,7 +179,7 @@ app.post('/auth/login', async (req, res) => {
         email: user.email,
       },
       process.env.JWT_SECRET,
-      { expiresIn: '1h' }
+      { expiresIn: '7d' }
     );
 
     res.cookie('token', token, {
