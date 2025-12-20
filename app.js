@@ -21,7 +21,7 @@ app.set('trust proxy', 1);
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// ================== MONGODB ==================
+// ================== MONGODB CONNECT ==================
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ MongoDB Connected'))
@@ -135,11 +135,7 @@ app.post('/auth/register', async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    await User.create({
-      name,
-      email,
-      password   // role will default to "user"
-    });
+    await User.create({ name, email, password });
 
     res.render('auth/login-register', {
       title: 'Login / Register',
@@ -155,7 +151,6 @@ app.post('/auth/register', async (req, res) => {
     });
   }
 });
-
 
 // LOGIN
 app.post('/auth/login', async (req, res) => {
@@ -183,11 +178,10 @@ app.post('/auth/login', async (req, res) => {
     );
 
     res.cookie('token', token, {
-  httpOnly: true,
-  secure: true,        // Render is HTTPS
-  sameSite: 'none',    // REQUIRED on cloud hosting
-});
-
+      httpOnly: true,
+      secure: true,      // Render HTTPS
+      sameSite: 'none',  // REQUIRED
+    });
 
     res.redirect('/');
   } catch (err) {
@@ -202,8 +196,16 @@ app.post('/auth/login', async (req, res) => {
 
 // LOGOUT
 app.get('/logout', (req, res) => {
-  res.clearCookie('token');
+  res.clearCookie('token', {
+    secure: true,
+    sameSite: 'none',
+  });
   res.redirect('/auth/login-register');
+});
+
+// ================== CARPOOL ==================
+app.get('/carpools/new', auth, (req, res) => {
+  res.render('user/create-offer', { title: 'Create Offer' });
 });
 
 // ================== WEBSOCKET ==================
