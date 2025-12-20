@@ -183,10 +183,11 @@ app.post('/auth/login', async (req, res) => {
     );
 
     res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-    });
+  httpOnly: true,
+  secure: true,        // Render is HTTPS
+  sameSite: 'none',    // REQUIRED on cloud hosting
+});
+
 
     res.redirect('/');
   } catch (err) {

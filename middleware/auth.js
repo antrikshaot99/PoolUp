@@ -2,26 +2,27 @@ const jwt = require('jsonwebtoken');
 
 function auth(req, res, next) {
     const token = req.cookies.token;
+
     if (!token) {
-        return res.redirect('/login');
+        return res.redirect('/auth/login-register');
     }
+
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         req.user = decoded;
-        res.locals.user = decoded; // Makes the user available to EJS templates
+        res.locals.user = decoded;
         next();
-    } catch (ex) {
+    } catch (err) {
         res.clearCookie('token');
-        return res.redirect('/login');
+        return res.redirect('/auth/login-register');
     }
 }
 
 function admin(req, res, next) {
     if (req.user && req.user.role === 'admin') {
-        next();
-    } else {
-        res.status(403).send('Forbidden. You do not have admin access.');
+        return next();
     }
+    return res.status(403).send('Forbidden. You do not have admin access.');
 }
 
 module.exports = { auth, admin };
