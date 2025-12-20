@@ -3,6 +3,14 @@
 PoolUp is a dynamic web application designed to connect students from the same university for safe, affordable, and convenient carpooling. This platform allows users to offer rides, book seats in available carpools, and communicate in real-time, fostering a connected campus community.
 
 ---
+## 🌐 Live Demo
+
+
+[![Live Demo](https://img.shields.io/badge/Live-Demo-blueviolet)](https://poolup.onrender.com)
+
+🚗 **PoolUp** is live! Explore ride listings, book seats, and chat with drivers in real time.
+
+---
 
 ## ✨ Key Features
 
