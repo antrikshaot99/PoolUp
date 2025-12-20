@@ -64,7 +64,7 @@ app.set('layout', 'layouts/main');
 const User = require('./models/User');
 const Carpool = require('./models/Carpool');
 const Chat = require('./models/Chat');
-const { auth, admin } = require('./middleware/auth');
+const { auth } = require('./middleware/auth');
 
 // ================== GLOBAL AUTH ==================
 app.use((req, res, next) => {
@@ -125,7 +125,6 @@ app.get('/auth/login-register', (req, res) => {
   });
 });
 
-// REGISTER
 app.post('/auth/register', async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -146,12 +145,11 @@ app.post('/auth/register', async (req, res) => {
   }
 });
 
-// LOGIN
 app.post('/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-
     const user = await User.findOne({ email });
+
     if (!user || !(await user.comparePassword(password))) {
       return res.render('auth/login-register', {
         title: 'Login / Register',
@@ -173,8 +171,8 @@ app.post('/auth/login', async (req, res) => {
 
     res.cookie('token', token, {
       httpOnly: true,
-      secure: true,      // REQUIRED on Render
-      sameSite: 'none',  // REQUIRED
+      secure: true,      // Render = HTTPS
+      sameSite: 'none',
     });
 
     res.redirect('/');
@@ -188,7 +186,6 @@ app.post('/auth/login', async (req, res) => {
   }
 });
 
-// LOGOUT
 app.get('/logout', (req, res) => {
   res.clearCookie('token', { secure: true, sameSite: 'none' });
   res.redirect('/auth/login-register');
@@ -228,7 +225,6 @@ app.post('/carpools', auth, async (req, res) => {
   }
 });
 
-// BOOK
 app.post('/carpools/:id/book', auth, async (req, res) => {
   const seats = parseInt(req.body.seats || 1);
   const carpool = await Carpool.findById(req.params.id);
@@ -250,7 +246,6 @@ app.post('/carpools/:id/book', auth, async (req, res) => {
   res.redirect('/');
 });
 
-// CANCEL
 app.post('/carpools/:id/cancel', auth, async (req, res) => {
   const carpool = await Carpool.findById(req.params.id);
   if (!carpool) return res.redirect('/');
