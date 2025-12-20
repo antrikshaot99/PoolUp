@@ -99,27 +99,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(methodOverride('_method'));
 app.use(cookieParser());
 
-const session = require('express-session');
-const RedisStore = require('connect-redis')(session);
 
-const redisStore = new RedisStore({
-    client: cacheClient,
-    prefix: "sess:",
-});
-
-app.use(session({
-    name: "poolup.sid",
-    store: redisStore,
-    secret: process.env.SESSION_SECRET || "super-secret",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 1000 * 60 * 60 * 24,
-    },
-}));
 
 
 app.use(express.static(path.join(__dirname, 'public')));
