@@ -21,7 +21,7 @@ app.set('trust proxy', 1);
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// ================== MONGODB CONNECT ==================
+// ================== MONGODB ==================
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ MongoDB Connected'))
@@ -95,25 +95,20 @@ app.get('/', async (req, res) => {
       return res.render('home', { title: 'Welcome', carpools: [] });
     }
 
-    try {
-      const cached = await cacheClient.get('carpools:list');
-      if (cached) {
-        return res.render('home', {
-          title: 'Dashboard',
-          carpools: JSON.parse(cached),
-        });
-      }
-    } catch {}
+    const cached = await cacheClient.get('carpools:list');
+    if (cached) {
+      return res.render('home', {
+        title: 'Dashboard',
+        carpools: JSON.parse(cached),
+      });
+    }
 
     const carpools = await Carpool.find()
       .sort({ createdAt: -1 })
       .populate('userId', 'name email')
       .populate('bookedBy.user', 'name');
 
-    try {
-      await cacheClient.setEx('carpools:list', 30, JSON.stringify(carpools));
-    } catch {}
-
+    await cacheClient.setEx('carpools:list', 30, JSON.stringify(carpools));
     res.render('home', { title: 'Dashboard', carpools });
   } catch (err) {
     console.error(err);
@@ -134,7 +129,6 @@ app.get('/auth/login-register', (req, res) => {
 app.post('/auth/register', async (req, res) => {
   try {
     const { name, email, password } = req.body;
-
     await User.create({ name, email, password });
 
     res.render('auth/login-register', {
@@ -179,7 +173,7 @@ app.post('/auth/login', async (req, res) => {
 
     res.cookie('token', token, {
       httpOnly: true,
-      secure: true,      // Render HTTPS
+      secure: true,      // REQUIRED on Render
       sameSite: 'none',  // REQUIRED
     });
 
@@ -196,16 +190,96 @@ app.post('/auth/login', async (req, res) => {
 
 // LOGOUT
 app.get('/logout', (req, res) => {
-  res.clearCookie('token', {
-    secure: true,
-    sameSite: 'none',
-  });
+  res.clearCookie('token', { secure: true, sameSite: 'none' });
   res.redirect('/auth/login-register');
 });
 
 // ================== CARPOOL ==================
 app.get('/carpools/new', auth, (req, res) => {
   res.render('user/create-offer', { title: 'Create Offer' });
+});
+
+app.post('/carpools', auth, async (req, res) => {
+  try {
+    const { carName, location, time, price, gender, totalSeats } = req.body;
+
+    const rideTime = new Date(time);
+    if (rideTime <= new Date()) {
+      return res.status(400).send('Ride time must be in future');
+    }
+
+    await Carpool.create({
+      userId: req.user.id,
+      carName,
+      location,
+      time,
+      price,
+      gender,
+      totalSeats,
+      bookedSeats: 0,
+      bookedBy: [],
+    });
+
+    await cacheClient.del('carpools:list');
+    res.redirect('/');
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Failed to create carpool');
+  }
+});
+
+// BOOK
+app.post('/carpools/:id/book', auth, async (req, res) => {
+  const seats = parseInt(req.body.seats || 1);
+  const carpool = await Carpool.findById(req.params.id);
+
+  if (!carpool) return res.status(404).send('Carpool not found');
+  if (carpool.userId.equals(req.user.id))
+    return res.status(400).send('Cannot book your own ride');
+
+  const available = carpool.totalSeats - carpool.bookedSeats;
+  if (seats > available)
+    return res.status(400).send('Not enough seats');
+
+  await Carpool.findByIdAndUpdate(req.params.id, {
+    $inc: { bookedSeats: seats },
+    $push: { bookedBy: { user: req.user.id, seats } },
+  });
+
+  await cacheClient.del('carpools:list');
+  res.redirect('/');
+});
+
+// CANCEL
+app.post('/carpools/:id/cancel', auth, async (req, res) => {
+  const carpool = await Carpool.findById(req.params.id);
+  if (!carpool) return res.redirect('/');
+
+  const booking = carpool.bookedBy.find(
+    b => String(b.user) === String(req.user.id)
+  );
+  if (!booking) return res.redirect('/');
+
+  await Carpool.findByIdAndUpdate(req.params.id, {
+    $inc: { bookedSeats: -booking.seats },
+    $pull: { bookedBy: { user: req.user.id } },
+  });
+
+  await cacheClient.del('carpools:list');
+  res.redirect('/');
+});
+
+// ================== CHAT ==================
+app.get('/chat/:carpoolId', auth, async (req, res) => {
+  const messages = await Chat.find({
+    carpoolId: req.params.carpoolId,
+  }).populate('sender', 'name');
+
+  res.render('chat/chat', {
+    title: 'Chat',
+    carpoolId: req.params.carpoolId,
+    messages,
+  });
 });
 
 // ================== WEBSOCKET ==================
@@ -228,9 +302,7 @@ wss.on('connection', ws => {
       ws.room = data.carpoolId;
       if (!localConnections.has(ws.room)) {
         localConnections.set(ws.room, new Set());
-        await subscriber.subscribe(ws.room, msg =>
-          broadcast(ws.room, msg)
-        );
+        await subscriber.subscribe(ws.room, msg => broadcast(ws.room, msg));
       }
       localConnections.get(ws.room).add(ws);
     }
@@ -244,10 +316,7 @@ wss.on('connection', ws => {
 
       await publisher.publish(
         data.carpoolId,
-        JSON.stringify({
-          name: data.name,
-          message: data.message,
-        })
+        JSON.stringify({ name: data.name, message: data.message })
       );
     }
   });
