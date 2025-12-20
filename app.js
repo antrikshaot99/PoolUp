@@ -129,7 +129,12 @@ app.get('/auth/login-register', (req, res) => {
 app.post('/auth/register', async (req, res) => {
   try {
     const { name, email, password } = req.body;
-    await User.create({ name, email, password });
+
+    // 👇 ONLY this email becomes admin
+    const role = email === "admin@123" ? "admin" : "user";
+
+    await User.create({ name, email, password, role });
+
     res.render('auth/login-register', {
       title: 'Login / Register',
       message: 'Registration successful. Please login.',
@@ -144,6 +149,7 @@ app.post('/auth/register', async (req, res) => {
     });
   }
 });
+
 
 // LOGIN
 app.post('/auth/login', async (req, res) => {
