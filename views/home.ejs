@@ -112,10 +112,34 @@
 					<%
 						const rideTime = rideDate(carpool);
 						const isExpiredRide = rideTime <= now;
+						let userHasBooked = false;
+						let userBooking = null;
+
+						if (carpool.bookedBy) {
+							carpool.bookedBy.forEach((b) => {
+								const bid = b.user ? (b.user._id ? b.user._id : b.user) : null;
+
+								if (bid && String(bid) === String(user.id)) {
+									userHasBooked = true;
+									userBooking = b;
+								}
+							});
+						}
+
+						let rideStatus = 'upcoming';
+
+						if (isExpiredRide && userHasBooked) {
+							rideStatus = 'completed';
+						} else if (isExpiredRide) {
+							rideStatus = 'expired';
+						}
 					%>
 
 					<div class="carpool-card">
 						<div>
+							<div class="ride-status <%= rideStatus %>">
+								<%= rideStatus.charAt(0).toUpperCase() + rideStatus.slice(1) %>
+							</div>
 							<h4><%= carpool.carName %></h4>
 							<p><strong>From:</strong> <%= carpool.location %></p>
 							<p>
@@ -140,20 +164,6 @@
 								</form>
 							<% } else { %>
 								<%
-									let userHasBooked = false;
-									let userBooking = null;
-
-									if (carpool.bookedBy) {
-										carpool.bookedBy.forEach((b) => {
-											const bid = b.user ? (b.user._id ? b.user._id : b.user) : null;
-
-											if (bid && String(bid) === String(user.id)) {
-												userHasBooked = true;
-												userBooking = b;
-											}
-										});
-									}
-
 									const ownerId = carpool.userId && (carpool.userId._id ? carpool.userId._id : carpool.userId);
 									const isOwner = ownerId && String(ownerId) === String(user.id);
 									const availableSeats = (carpool.totalSeats || 0) - (carpool.bookedSeats || 0);
