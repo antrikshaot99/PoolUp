@@ -4,7 +4,7 @@ function auth(req, res, next) {
     const token = req.cookies.token;
 
     if (!token) {
-        return res.redirect('/auth/login-register');
+        return res.redirect('/login');
     }
 
     try {
@@ -14,7 +14,7 @@ function auth(req, res, next) {
         next();
     } catch (err) {
         res.clearCookie('token');
-        return res.redirect('/auth/login-register');
+        return res.redirect('/login');
     }
 }
 

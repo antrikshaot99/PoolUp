@@ -1,8 +1,11 @@
 // jest.config.js
 module.exports = {
-  // Use the preset. This will auto-start/stop MongoDB.
-  preset: '@shelf/jest-mongodb',
-  
   testEnvironment: 'node',
-  testTimeout: 20000, // Give tests 20 seconds
+  setupFiles: ['dotenv/config'],
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '/tests/e2e.test.js',
+    '/tests/browser_chat.test.js',
+  ],
+  testTimeout: 20000,
 };
