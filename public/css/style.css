@@ -452,4 +452,23 @@ form input, form select {
     border-color: rgba(239, 68, 68, 0.35);
 }
 
+.btn-success {
+    background: rgba(34,197,94,0.15);
+    color: #22c55e;
+    border: 1px solid #22c55e;
+    cursor: not-allowed;
+}
+
+.btn-expired {
+    background: rgba(239,68,68,0.15);
+    color: #ef4444;
+    border: 1px solid #ef4444;
+    cursor: not-allowed;
+}
+
+.btn-secondary:hover {
+    border-color: #8b5cf6;
+    color: #8b5cf6;
+}
+
 /* (seat visualization removed) */

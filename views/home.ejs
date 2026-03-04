@@ -127,18 +127,21 @@
 						}
 
 						let rideStatus = 'upcoming';
+						let rideStatusLabel = '🟦 Upcoming';
 
 						if (isExpiredRide && userHasBooked) {
 							rideStatus = 'completed';
+							rideStatusLabel = '✅ Completed';
 						} else if (isExpiredRide) {
 							rideStatus = 'expired';
+							rideStatusLabel = '⛔ Expired';
 						}
 					%>
 
 					<div class="carpool-card">
 						<div>
 							<div class="ride-status <%= rideStatus %>">
-								<%= rideStatus.charAt(0).toUpperCase() + rideStatus.slice(1) %>
+								<%= rideStatusLabel %>
 							</div>
 							<h4><%= carpool.carName %></h4>
 							<p><strong>From:</strong> <%= carpool.location %></p>
@@ -175,9 +178,9 @@
 									</span>
 								<% } else if (isExpiredRide) { %>
 									<% if (userHasBooked) { %>
-										<button class="btn btn-success" disabled>Completed Ride</button>
+										<button class="btn btn-success" disabled>✓ Completed Ride</button>
 									<% } else { %>
-										<button class="btn" style="background:gray;" disabled>Expired</button>
+										<button class="btn btn-expired" disabled>⛔ Expired</button>
 									<% } %>
 								<% } else if (userHasBooked) { %>
 									<p class="booked-info">
